@@ -3,11 +3,11 @@ package influxdb
 import (
 	"fmt"
 	"log"
-	uurl "net/url"
 	"time"
+	uurl "net/url"
 
-	"github.com/influxdata/influxdb/client"
 	"github.com/rcrowley/go-metrics"
+	"github.com/influxdata/influxdb/client"
 )
 
 type reporter struct {
@@ -30,6 +30,7 @@ func InfluxDB(r metrics.Registry, d time.Duration, url, database, username, pass
 
 // InfluxDBWithTags starts a InfluxDB reporter which will post the metrics from the given registry at each d interval with the specified tags
 func InfluxDBWithTags(r metrics.Registry, d time.Duration, url, database, username, password string, tags map[string]string) {
+	
 	u, err := uurl.Parse(url)
 	if err != nil {
 		log.Printf("unable to parse InfluxDB url %s. err=%v", url, err)
@@ -45,11 +46,12 @@ func InfluxDBWithTags(r metrics.Registry, d time.Duration, url, database, userna
 		password: password,
 		tags:     tags,
 	}
+	
 	if err := rep.makeClient(); err != nil {
 		log.Printf("unable to make InfluxDB client. err=%v", err)
 		return
 	}
-
+	
 	rep.run()
 }
 
@@ -59,11 +61,21 @@ func (r *reporter) makeClient() (err error) {
 		Username: r.username,
 		Password: r.password,
 	})
-
 	return
 }
 
 func (r *reporter) run() {
+	
+	// try to synchronize the reporting of metrics across multiple instances by
+	// pegging ticks to a round mutiple of intervals since the zero time.
+	now  := time.Now()
+	base := now.Truncate(r.interval)
+	wait := base.Add(r.interval).Sub(now)
+	
+	// wait until the next interval
+	<-time.After(wait)
+	
+	// start ticking from here
 	intervalTicker := time.Tick(r.interval)
 	pingTicker := time.Tick(time.Second * 5)
 
@@ -84,6 +96,7 @@ func (r *reporter) run() {
 			}
 		}
 	}
+	
 }
 
 func (r *reporter) send() error {
